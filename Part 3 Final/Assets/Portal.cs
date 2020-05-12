@@ -28,6 +28,13 @@ public class Portal : MonoBehaviour
             target.normalInvisible.TransformPoint(
                 sender.normalVisible.InverseTransformPoint(position));
     }
+    
+    public static Vector3 TransformDirectionBetweenPortals(Portal sender, Portal target, Vector3 position)
+    {
+        return
+            target.normalInvisible.TransformDirection(
+                sender.normalVisible.InverseTransformDirection(position));
+    }
 
     public static Quaternion TransformRotationBetweenPortals(Portal sender, Portal target, Quaternion rotation)
     {
@@ -128,6 +135,93 @@ public class Portal : MonoBehaviour
         {
             objectsInPortal.Remove(portalableObject);
         }
+    }
+    
+    public static bool RaycastRecursive(
+        Vector3 position,
+        Vector3 direction,
+        LayerMask layerMask,
+        int maxRecursions,
+        out RaycastHit hitInfo)
+    {
+        return RaycastRecursiveInternal(position,
+            direction,
+            layerMask,
+            maxRecursions,
+            out hitInfo,
+            0,
+            null);
+    }
+
+    private static bool RaycastRecursiveInternal(
+        Vector3 position,
+        Vector3 direction,
+        LayerMask layerMask,
+        int maxRecursions,
+        out RaycastHit hitInfo,
+        int currentRecursion,
+        GameObject ignoreObject)
+    {
+        // Ignore a specific object when raycasting.
+        // Useful for preventing a raycast through a portal from hitting the target portal from the back,
+        // which makes a raycast unable to go through a portal since it'll just be absorbed by the target portal's trigger.
+
+        var ignoreObjectOriginalLayer = 0;
+        if (ignoreObject)
+        {
+            ignoreObjectOriginalLayer = ignoreObject.layer;
+            ignoreObject.layer = 2; // Ignore raycast
+        }
+
+        // Shoot raycast
+
+        var raycastHitSomething = Physics.Raycast(
+            position,
+            direction,
+            out var hit,
+            Mathf.Infinity,
+            layerMask); // Clamp to max array length
+
+        // Reset ignore
+
+        if (ignoreObject)
+            ignoreObject.layer = ignoreObjectOriginalLayer;
+
+        // If no objects are hit, the recursion ends here, with no effect
+
+        if (!raycastHitSomething)
+        {
+            hitInfo = new RaycastHit(); // Dummy
+            return false;
+        }
+        
+        // If the object hit is a portal, recurse, unless we are already at max recursions
+
+        var portal = hit.collider.GetComponent<Portal>();
+        if (portal)
+        {
+            if (currentRecursion >= maxRecursions)
+            {
+                hitInfo = new RaycastHit(); // Dummy
+                return false;
+            }
+
+            // Continue going down the rabbit hole...
+
+            return RaycastRecursiveInternal(
+                TransformPositionBetweenPortals(portal, portal.targetPortal, hit.point),
+                TransformDirectionBetweenPortals(portal, portal.targetPortal, direction),
+                layerMask,
+                maxRecursions,
+                out hitInfo,
+                currentRecursion + 1,
+                portal.targetPortal.gameObject);
+        }
+
+        // If the object hit is not a portal, then congrats! We stop here and report back that we hit something.
+        
+        hitInfo = hit;
+        return true;
     }
 
     private void LateUpdate()

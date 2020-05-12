@@ -26,9 +26,9 @@ public class Portal : MonoBehaviour
     public static Quaternion TransformRotationBetweenPortals(Portal sender, Portal target, Quaternion rotation)
     {
         return
-            rotation *
+            target.normalInvisible.rotation *
             Quaternion.Inverse(sender.normalVisible.rotation) *
-            target.normalInvisible.rotation;
+            rotation;
     }
 
     private void Start()
